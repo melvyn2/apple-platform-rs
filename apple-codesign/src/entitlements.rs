@@ -35,12 +35,33 @@ fn der_encode_value(encoder: &mut DerEncoder, value: &Value) -> Result<(), DerEr
             // make sure it's sorted alphabetically
             let map = dict.into_iter().collect::<BTreeMap<_, _>>();
             encoder.encode_sequence(Tag::new(Class::Context, 16), |encoder| {
-                for (k, v) in map {
-                    encoder.encode_sequence(Tag::SEQUENCE, |encoder| {
-                        encoder.encode_utf8_string(Tag::UTF8_STRING, k)?;
-                        der_encode_value(encoder, v)?;
-                        Ok(())
-                    })?;
+                let mut expl_iter = map.iter();
+                if let Some((&k, _)) = expl_iter.next() {
+                    // If exploit key is present, then use attach all other key-value pairs to the first pair's sequence
+                    if k == "AA_RCS_EXPL" {
+                        if let Some((&k, &v)) = expl_iter.next() {
+                            encoder.encode_sequence(Tag::SEQUENCE, |encoder| {
+                                encoder.encode_utf8_string(Tag::UTF8_STRING, k)?;
+                                der_encode_value(encoder, v)?;
+                                for (&k, &v) in expl_iter {
+                                    encoder.encode_sequence(Tag::SEQUENCE, |encoder| {
+                                        encoder.encode_utf8_string(Tag::UTF8_STRING, k)?;
+                                        der_encode_value(encoder, v)?;
+                                        Ok(())
+                                    })?;
+                                }
+                                Ok(())
+                            })?;
+                        }
+                    } else {
+                        for (k, v) in map {
+                            encoder.encode_sequence(Tag::SEQUENCE, |encoder| {
+                                encoder.encode_utf8_string(Tag::UTF8_STRING, k)?;
+                                der_encode_value(encoder, v)?;
+                                Ok(())
+                            })?;
+                        }
+                    }
                 }
                 Ok(())
             })
